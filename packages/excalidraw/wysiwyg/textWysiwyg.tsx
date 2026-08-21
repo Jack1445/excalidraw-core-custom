@@ -11,11 +11,15 @@ import {
   MIME_TYPES,
   applyDarkModeFilter,
   isRTL,
+  getVerticalOffset,
 } from "@excalidraw/common";
 import { pointFrom, pointRotateRads, type Radians } from "@excalidraw/math";
 
 import {
   getTextFromElements,
+  getInlineFormulaData,
+  getInlineFormulaRenderSize,
+  getInlineFormulaRuns,
   originalContainerCache,
   updateBoundElements,
   updateOriginalContainerCache,
@@ -54,7 +58,7 @@ import type {
   ExcalidrawTextContainer,
 } from "@excalidraw/element/types";
 
-import { actionSaveToActiveFile } from "../actions";
+import { actionInsertInlineFormula, actionSaveToActiveFile } from "../actions";
 
 import {
   parseClipboard,
@@ -234,6 +238,134 @@ export const textWysiwyg = ({
     x: number;
     y: number;
   } | null = null;
+
+  let formulaLayer: HTMLDivElement | null = null;
+
+  const updateInlineFormulaOverlay = (
+    updatedTextElement: ExcalidrawTextElement,
+  ) => {
+    if (!formulaLayer) {
+      return;
+    }
+    formulaLayer.replaceChildren();
+    const data = getInlineFormulaData(updatedTextElement);
+    if (
+      !data ||
+      updatedTextElement.containerId ||
+      !updatedTextElement.autoResize ||
+      isRTL(editable.value)
+    ) {
+      formulaLayer.hidden = true;
+      return;
+    }
+
+    formulaLayer.hidden = false;
+    Object.assign(formulaLayer.style, {
+      width: editable.style.width,
+      height: editable.style.height,
+      left: editable.style.left,
+      top: editable.style.top,
+      transform: editable.style.transform,
+      maxHeight: editable.style.maxHeight,
+    });
+
+    const font = getFontString(updatedTextElement);
+    const lineHeightPx = getLineHeightInPx(
+      updatedTextElement.fontSize,
+      updatedTextElement.lineHeight,
+    );
+    const verticalOffset = getVerticalOffset(
+      updatedTextElement.fontFamily,
+      updatedTextElement.fontSize,
+      lineHeightPx,
+    );
+    const canvasBackground =
+      app.state.viewBackgroundColor === "transparent"
+        ? app.state.theme === THEME.DARK
+          ? "#121212"
+          : "#ffffff"
+        : app.state.viewBackgroundColor;
+    const lines = editable.value.replace(/\r\n?/g, "\n").split("\n");
+    let lineSourceOffset = 0;
+
+    lines.forEach((line, lineIndex) => {
+      const runs = getInlineFormulaRuns(line, data);
+      if (!runs.some((run) => run.type === "formula")) {
+        lineSourceOffset += line.length + 1;
+        return;
+      }
+      const sourceLineWidth = getLineWidth(line, font);
+      let cursorX =
+        updatedTextElement.textAlign === "center"
+          ? (updatedTextElement.width - sourceLineWidth) / 2
+          : updatedTextElement.textAlign === "right"
+          ? updatedTextElement.width - sourceLineWidth
+          : 0;
+      let runSourceOffset = 0;
+
+      runs.forEach((run) => {
+        if (run.type === "text") {
+          cursorX += getLineWidth(run.text, font);
+          runSourceOffset += run.text.length;
+          return;
+        }
+        const sourceWidth = Math.max(1, getLineWidth(run.source, font));
+        const size = getInlineFormulaRenderSize(
+          run.record,
+          updatedTextElement.fontSize,
+        );
+        const rangeStart = lineSourceOffset + runSourceOffset;
+        const rangeEnd = rangeStart + run.source.length;
+        const formula = document.createElement("span");
+        const image = document.createElement("img");
+        formula.dataset.inlineFormula = run.record.latex;
+        formula.title = run.record.latex;
+        Object.assign(formula.style, {
+          position: "absolute",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-start",
+          left: `${cursorX}px`,
+          top: `${lineIndex * lineHeightPx}px`,
+          width: `${sourceWidth}px`,
+          height: `${lineHeightPx}px`,
+          background: canvasBackground,
+          pointerEvents: "auto",
+          cursor: "text",
+          overflow: "visible",
+        });
+        image.src = run.record.dataURL;
+        image.alt = run.record.latex;
+        Object.assign(image.style, {
+          display: "block",
+          width: `${Math.min(size.width, sourceWidth)}px`,
+          height: `${Math.min(
+            size.height,
+            Math.max(1, verticalOffset + size.height * 0.2),
+          )}px`,
+          objectFit: "contain",
+          opacity: `${updatedTextElement.opacity / 100}`,
+          pointerEvents: "none",
+        });
+        formula.onpointerdown = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        };
+        formula.ondblclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          editable.focus();
+          editable.setSelectionRange(rangeStart, rangeEnd);
+          app.actionManager.executeAction(actionInsertInlineFormula, "ui", null);
+        };
+        formula.appendChild(image);
+        formulaLayer!.appendChild(formula);
+        cursorX += sourceWidth;
+        runSourceOffset += run.source.length;
+      });
+      lineSourceOffset += line.length + 1;
+    });
+  };
 
   const textPropertiesUpdated = (
     updatedTextElement: ExcalidrawTextElement,
@@ -426,6 +558,7 @@ export const textWysiwyg = ({
       if (isTestEnv()) {
         editable.style.fontFamily = getFontFamilyString(updatedTextElement);
       }
+      updateInlineFormulaOverlay(updatedTextElement);
 
       app.scene.mutateElement(updatedTextElement, { x: coordX, y: coordY });
     }
@@ -469,6 +602,19 @@ export const textWysiwyg = ({
     boxSizing: "content-box",
   });
   editable.value = element.originalText;
+  formulaLayer = document.createElement("div");
+  formulaLayer.classList.add("excalidraw-inline-formula-editor-layer");
+  Object.assign(formulaLayer.style, {
+    position: "absolute",
+    display: "block",
+    margin: 0,
+    padding: 0,
+    border: 0,
+    overflow: "visible",
+    pointerEvents: "none",
+    zIndex: "var(--zIndex-wysiwyg)",
+    boxSizing: "content-box",
+  });
   updateWysiwygStyle();
 
   const getCaretIndexFromInitialSceneCoords = () => {
@@ -632,6 +778,10 @@ export const textWysiwyg = ({
         editable.selectionEnd = selectionStart;
       }
       onChange(editable.value);
+      const updatedTextElement = app.scene.getElement<
+        NonDeleted<ExcalidrawTextElement>
+      >(element.id);
+      updatedTextElement && updateInlineFormulaOverlay(updatedTextElement);
     };
   }
 
@@ -867,6 +1017,8 @@ export const textWysiwyg = ({
     unsubOnChange();
     unbindOnScroll();
 
+    formulaLayer?.remove();
+    formulaLayer = null;
     editable.remove();
   };
 
@@ -1031,9 +1183,12 @@ export const textWysiwyg = ({
     window.addEventListener("pointerdown", onPointerDown, { capture: true });
   });
   window.addEventListener("beforeunload", handleSubmit);
-  excalidrawContainer
-    ?.querySelector(".excalidraw-textEditorContainer")!
-    .appendChild(editable);
+  const textEditorContainer = excalidrawContainer?.querySelector(
+    ".excalidraw-textEditorContainer",
+  );
+  textEditorContainer?.appendChild(editable);
+  textEditorContainer?.appendChild(formulaLayer);
+  updateWysiwygStyle();
 
   return handleSubmit;
 };

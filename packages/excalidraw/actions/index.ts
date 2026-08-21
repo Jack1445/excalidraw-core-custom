@@ -93,5 +93,6 @@ export { actionToggleElementLock } from "./actionElementLock";
 export { actionToggleLinearEditor } from "./actionLinearEditor";
 
 export { actionToggleSearchMenu } from "./actionToggleSearchMenu";
+export { actionInsertInlineFormula } from "./actionInlineFormula"; // zsviczian -- native text inline formula action
 
 export { actionToggleCropEditor } from "./actionCropEditor";

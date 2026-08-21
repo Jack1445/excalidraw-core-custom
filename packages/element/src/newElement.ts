@@ -26,6 +26,7 @@ import { newElementWith } from "./mutateElement";
 import { getBoundTextMaxWidth } from "./textElement";
 import { normalizeText, measureText } from "./textMeasurements";
 import { wrapText } from "./textWrapping";
+import { getInlineFormulaTextMetrics } from "./inlineFormula"; // zsviczian -- preserve native text metrics around inline formulas
 
 import { isLineElement } from "./typeChecks";
 
@@ -345,17 +346,20 @@ const getAdjustedDimensions = (
   element: ExcalidrawTextElement,
   elementsMap: ElementsMap,
   nextText: string,
+  measuredDimensions?: { width: number; height: number } | null, // zsviczian -- optional mixed text/formula metrics
 ): {
   x: number;
   y: number;
   width: number;
   height: number;
 } => {
-  let { width: nextWidth, height: nextHeight } = measureText(
-    nextText,
-    getFontString(element),
-    element.lineHeight,
-  );
+  let { width: nextWidth, height: nextHeight } =
+    measuredDimensions ??
+    measureText(
+      nextText,
+      getFontString(element),
+      element.lineHeight,
+    ); // zsviczian -- formula-aware metrics only when the element opts in
 
   // wrapped text
   if (!element.autoResize) {
@@ -371,11 +375,13 @@ const getAdjustedDimensions = (
     !element.containerId &&
     element.autoResize
   ) {
-    const prevMetrics = measureText(
-      element.text,
-      getFontString(element),
-      element.lineHeight,
-    );
+    const prevMetrics =
+      getInlineFormulaTextMetrics(element, element.text) ??
+      measureText(
+        element.text,
+        getFontString(element),
+        element.lineHeight,
+      ); // zsviczian -- keep centered text anchored when formula width changes
     const offsets = getTextElementPositionOffsets(element, {
       width: nextWidth - prevMetrics.width,
       height: nextHeight - prevMetrics.height,
@@ -495,7 +501,12 @@ export const refreshTextDimensions = (
         : textElement.width,
     );
   }
-  const dimensions = getAdjustedDimensions(textElement, elementsMap, text);
+  const dimensions = getAdjustedDimensions(
+    textElement,
+    elementsMap,
+    text,
+    getInlineFormulaTextMetrics(textElement, text),
+  ); // zsviczian -- formulas participate in standalone native text dimensions
   return { text, ...dimensions };
 };
 

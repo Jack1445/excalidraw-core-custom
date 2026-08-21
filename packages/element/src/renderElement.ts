@@ -56,6 +56,13 @@ import {
 } from "./textElement";
 import { getLineHeightInPx } from "./textMeasurements";
 import {
+  getInlineFormulaData,
+  getInlineFormulaImage,
+  getInlineFormulaLineWidth,
+  getInlineFormulaRenderSize,
+  getInlineFormulaRuns,
+} from "./inlineFormula"; // zsviczian -- render formula runs without replacing native text
+import {
   isTextElement,
   isLinearElement,
   isFreeDrawElement,
@@ -522,6 +529,9 @@ const drawElementOnCanvas = (
         context.canvas.setAttribute("dir", rtl ? "rtl" : "ltr");
         context.save();
         context.font = getFontString(element);
+        const inlineFormulaData =
+          !rtl && !element.containerId ? getInlineFormulaData(element) : null; // zsviczian -- bound/RTL text remains untouched
+
         context.fillStyle = applyDarkModeFilter(
           element.strokeColor,
           renderConfig.theme === THEME.DARK,
@@ -550,11 +560,47 @@ const drawElementOnCanvas = (
         );
 
         for (let index = 0; index < lines.length; index++) {
-          context.fillText(
-            lines[index],
-            horizontalOffset,
-            index * lineHeightPx + verticalOffset,
-          );
+          const baselineY = index * lineHeightPx + verticalOffset;
+          const runs = inlineFormulaData
+            ? getInlineFormulaRuns(lines[index], inlineFormulaData)
+            : null;
+          const hasFormula = runs?.some((run) => run.type === "formula");
+          if (!runs || !hasFormula) {
+            context.fillText(lines[index], horizontalOffset, baselineY);
+            continue;
+          }
+
+          const lineWidth = getInlineFormulaLineWidth(runs, element);
+          let cursorX =
+            element.textAlign === "center"
+              ? (element.width - lineWidth) / 2
+              : element.textAlign === "right"
+              ? element.width - lineWidth
+              : 0;
+          context.textAlign = "left";
+          for (const run of runs) {
+            if (run.type === "text") {
+              context.fillText(run.text, cursorX, baselineY);
+              cursorX += context.measureText(run.text).width;
+              continue;
+            }
+            const size = getInlineFormulaRenderSize(run.record, element.fontSize);
+            const image = getInlineFormulaImage(run.record.dataURL, () => {
+              elementWithCanvasCache.delete(element);
+            });
+            if (image) {
+              context.drawImage(
+                image,
+                cursorX,
+                baselineY - size.height * 0.8,
+                size.width,
+                size.height,
+              );
+            } else {
+              context.fillText("□", cursorX, baselineY);
+            }
+            cursorX += size.width;
+          }
         }
         context.restore();
         if (shouldTemporarilyAttach) {

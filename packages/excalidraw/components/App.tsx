@@ -261,7 +261,9 @@ import {
   getActiveTextElement,
   isEligibleFrameChildType,
   getBindingStrategyForDraggingBindingElementEndpoints,
+  findInlineFormulaAtScenePoint,
   isNonDeletedElement,
+  subscribeToInlineFormulaImageLoad, // zsviczian -- redraw after persisted formula SVGs load
 } from "@excalidraw/element";
 
 import type { GlobalPoint, LocalPoint, Radians } from "@excalidraw/math";
@@ -323,6 +325,7 @@ import {
   actionUnbindText,
   actionBindText,
   actionUngroup,
+  actionInsertInlineFormula, // zsviczian -- ensure the fork-only action registers
   actionLink,
   actionToggleElementLock,
   actionToggleLinearEditor,
@@ -661,6 +664,7 @@ class App extends React.Component<AppProps, AppState> {
 
   public files: BinaryFiles = {};
   public imageCache: AppClassProperties["imageCache"] = new Map();
+  private unsubscribeInlineFormulaImageLoad: (() => void) | null = null; // zsviczian -- formula SVG load lifecycle
   private iFrameRefs = new Map<ExcalidrawElement["id"], HTMLIFrameElement>();
   /**
    * Indicates whether the embeddable's url has been validated for rendering.
@@ -3883,6 +3887,10 @@ class App extends React.Component<AppProps, AppState> {
     }
 
     this.scene.onUpdate(this.triggerRender);
+    this.unsubscribeInlineFormulaImageLoad =
+      subscribeToInlineFormulaImageLoad(() => {
+        this.scene.triggerUpdate();
+      }); // zsviczian -- formula data URLs load independently of BinaryFiles
     this.addEventListeners();
 
     if (this.props.autoFocus && this.excalidrawContainerRef.current) {
@@ -3924,6 +3932,8 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   public componentWillUnmount() {
+    this.unsubscribeInlineFormulaImageLoad?.(); // zsviczian -- release formula image listener
+    this.unsubscribeInlineFormulaImageLoad = null;
     // we're recreating the api object reference so that the
     // <ExcalidrawAPIContext.Provider/> picks up on it
     this.api = { ...this.api, isDestroyed: true };
@@ -7516,6 +7526,7 @@ class App extends React.Component<AppProps, AppState> {
   };
 
   private debounceDoubleClickTimestamp: number = 0; //zsviczian
+  private inlineFormulaDoubleClickHandledAt: number = 0;
   private startImageCropping = (image: ExcalidrawImageElement) => {
     this.store.scheduleCapture();
     this.setState({
@@ -7570,6 +7581,7 @@ class App extends React.Component<AppProps, AppState> {
   ) => {
     if (
       !this.isInteractionEnabled() ||
+      Date.now() - this.inlineFormulaDoubleClickHandledAt < 500 ||
       this.state.editingTextElement ||
       !this.shouldHandleBrowserCanvasDoubleClick(event.type)
     ) {
@@ -13101,6 +13113,27 @@ class App extends React.Component<AppProps, AppState> {
 
       const selectedTextEditingContainer =
         this.getSelectedTextEditingContainerAtPosition(hitElement, sceneCoords);
+
+      if (
+        this.lastPointerUpIsDoubleClick &&
+        isTextElement(hitElement) &&
+        !hitElement.containerId &&
+        hitElement.autoResize
+      ) {
+        const formulaRange = findInlineFormulaAtScenePoint(
+          hitElement,
+          sceneCoords.x,
+          sceneCoords.y,
+        );
+        if (formulaRange) {
+          this.inlineFormulaDoubleClickHandledAt = Date.now();
+          this.actionManager.executeAction(actionInsertInlineFormula, "ui", {
+            elementId: hitElement.id,
+            range: formulaRange,
+          });
+          return;
+        }
+      }
 
       if (
         activeTool.type === this.state.preferredSelectionTool.type &&

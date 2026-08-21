@@ -24,6 +24,7 @@ import {
   ShapeCache,
   updateBoundPoint,
 } from "@excalidraw/element";
+import type { InlineFormulaRenderResult } from "@excalidraw/element"; // zsviczian -- MathJax result returned by the stable Obsidian host plugin
 
 import { getHostPlugin } from "@excalidraw/common/commonObsidianUtils";
 
@@ -324,6 +325,16 @@ export const getZoomMax = () => getHostPlugin().settings.zoomMax ?? MAX_ZOOM;
 export const runAction = (action: string): void => {
   getHostPlugin()?.runAction(action);
 };
+
+export const editInlineFormula = async (
+  initialLatex?: string,
+): Promise<InlineFormulaRenderResult | null> => {
+  const plugin = getHostPlugin();
+  if (!plugin || typeof plugin.editInlineFormula !== "function") {
+    return null;
+  }
+  return await plugin.editInlineFormula(initialLatex);
+}; // zsviczian -- reuse the 2.26.4 plugin's existing LaTeX editor and MathJax renderer
 
 export const t2 = (key: string): string => {
   return getHostPlugin()?.getLabel(key) ?? key;

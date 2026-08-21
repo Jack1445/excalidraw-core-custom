@@ -199,6 +199,9 @@ export const SelectedShapeActions = ({
         <>
           <fieldset>{renderAction("changeFontFamily")}</fieldset>
           {renderAction("changeFontSize")}
+          {appState.editingTextElement &&
+            !appState.editingTextElement.containerId &&
+            renderAction("insertInlineFormula")}{/* zsviczian -- additive native-text formula control */}
           {predicates.textAlign && renderAction("changeTextAlign")}
         </>
       )}
@@ -508,6 +511,9 @@ const CombinedTextProperties = ({
           >
             <div className="selected-shape-actions">
               {predicates.text && renderAction("changeFontSize")}
+              {appState.editingTextElement &&
+                !appState.editingTextElement.containerId &&
+                renderAction("insertInlineFormula")}{/* zsviczian -- keep the control inside the existing text popover */}
               {predicates.textAlign && renderAction("changeTextAlign")}
               {predicates.verticalAlign && renderAction("changeVerticalAlign")}
             </div>

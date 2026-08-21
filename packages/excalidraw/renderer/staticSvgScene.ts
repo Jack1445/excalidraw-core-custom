@@ -22,6 +22,12 @@ import { LinearElementEditor } from "@excalidraw/element";
 import { getBoundTextElement, getContainerElement } from "@excalidraw/element";
 import { getLineHeightInPx } from "@excalidraw/element";
 import {
+  getInlineFormulaData,
+  getInlineFormulaLineWidth,
+  getInlineFormulaRenderSize,
+  getInlineFormulaRuns,
+} from "@excalidraw/element"; // zsviczian -- export native text with inline formula images
+import {
   isArrowElement,
   isIframeLikeElement,
   isInitializedImageElement,
@@ -739,6 +745,10 @@ const renderElementToSvg = (
           lineHeightPx,
         );
         const direction = isRTL(element.text) ? "rtl" : "ltr";
+        const inlineFormulaData =
+          direction === "ltr" && !element.containerId
+            ? getInlineFormulaData(element)
+            : null; // zsviczian -- bound/RTL text keeps upstream rendering
         const textAnchor =
           element.textAlign === "center"
             ? "middle"
@@ -746,24 +756,62 @@ const renderElementToSvg = (
             ? "end"
             : "start";
         for (let i = 0; i < lines.length; i++) {
-          const text = svgRoot.ownerDocument.createElementNS(SVG_NS, "text");
-          text.textContent = lines[i];
-          text.setAttribute("x", `${horizontalOffset}`);
-          text.setAttribute("y", `${i * lineHeightPx + verticalOffset}`);
-          text.setAttribute("font-family", getFontFamilyString(element));
-          text.setAttribute("font-size", `${element.fontSize}px`);
-          text.setAttribute(
-            "fill",
-            applyDarkModeFilter(
-              element.strokeColor,
-              renderConfig.theme === THEME.DARK,
-            ),
-          );
-          text.setAttribute("text-anchor", textAnchor);
-          text.setAttribute("style", "white-space: pre;");
-          text.setAttribute("direction", direction);
-          text.setAttribute("dominant-baseline", "alphabetic");
-          node.appendChild(text);
+          const baselineY = i * lineHeightPx + verticalOffset;
+          const runs = inlineFormulaData
+            ? getInlineFormulaRuns(lines[i], inlineFormulaData)
+            : null;
+          const hasFormula = runs?.some((run) => run.type === "formula");
+          const renderText = (value: string, x: number, anchor = "start") => {
+            const text = svgRoot.ownerDocument.createElementNS(SVG_NS, "text");
+            text.textContent = value;
+            text.setAttribute("x", `${x}`);
+            text.setAttribute("y", `${baselineY}`);
+            text.setAttribute("font-family", getFontFamilyString(element));
+            text.setAttribute("font-size", `${element.fontSize}px`);
+            text.setAttribute(
+              "fill",
+              applyDarkModeFilter(
+                element.strokeColor,
+                renderConfig.theme === THEME.DARK,
+              ),
+            );
+            text.setAttribute("text-anchor", anchor);
+            text.setAttribute("style", "white-space: pre;");
+            text.setAttribute("direction", direction);
+            text.setAttribute("dominant-baseline", "alphabetic");
+            node.appendChild(text);
+          };
+          if (!runs || !hasFormula) {
+            renderText(lines[i], horizontalOffset, textAnchor);
+            continue;
+          }
+          const lineWidth = getInlineFormulaLineWidth(runs, element);
+          let cursorX =
+            element.textAlign === "center"
+              ? (element.width - lineWidth) / 2
+              : element.textAlign === "right"
+              ? element.width - lineWidth
+              : 0;
+          for (const run of runs) {
+            if (run.type === "text") {
+              renderText(run.text, cursorX);
+              const measuringContext = document
+                .createElement("canvas")
+                .getContext("2d")!;
+              measuringContext.font = `${element.fontSize}px ${getFontFamilyString(element)}`;
+              cursorX += measuringContext.measureText(run.text).width;
+              continue;
+            }
+            const size = getInlineFormulaRenderSize(run.record, element.fontSize);
+            const image = svgRoot.ownerDocument.createElementNS(SVG_NS, "image");
+            image.setAttribute("href", run.record.dataURL);
+            image.setAttribute("x", `${cursorX}`);
+            image.setAttribute("y", `${baselineY - size.height * 0.8}`);
+            image.setAttribute("width", `${size.width}`);
+            image.setAttribute("height", `${size.height}`);
+            node.appendChild(image);
+            cursorX += size.width;
+          }
         }
 
         const g = maybeWrapNodesInFrameClipPath(
