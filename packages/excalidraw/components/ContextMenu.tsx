@@ -66,7 +66,7 @@ export const ContextMenu = React.memo(
         className="context-menu-popover"
       >
         <ul
-          className="context-menu"
+          className="context-menu excalidraw-context-menu"
           onContextMenu={(event) => event.preventDefault()}
         >
           {

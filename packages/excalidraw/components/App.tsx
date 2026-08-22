@@ -262,6 +262,7 @@ import {
   isEligibleFrameChildType,
   getBindingStrategyForDraggingBindingElementEndpoints,
   findInlineFormulaAtScenePoint,
+  hasRenderableInlineFormulaSource,
   isNonDeletedElement,
   subscribeToInlineFormulaImageLoad, // zsviczian -- redraw after persisted formula SVGs load
 } from "@excalidraw/element";
@@ -6835,7 +6836,13 @@ class App extends React.Component<AppProps, AppState> {
                 nextOriginalText,
                 isDeleted,
               );
-            nextOriginalText = updatedNextOriginalText ?? nextOriginalText;
+            const submittedDisplayText =
+              updatedNextOriginalText ?? nextOriginalText;
+            nextOriginalText =
+              !submittedDisplayText.trim() &&
+              hasRenderableInlineFormulaSource(_element, rawText)
+                ? rawText
+                : submittedDisplayText;
             hasTextLink = !!nextLink;
             link = syncElementLinkWithText() ? nextLink : element.link ?? undefined;
           }

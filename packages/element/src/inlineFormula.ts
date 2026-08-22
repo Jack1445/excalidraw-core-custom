@@ -155,6 +155,17 @@ export const getInlineFormulaRuns = (
   return runs.length ? runs : [{ type: "text", text }];
 };
 
+export const hasRenderableInlineFormulaSource = (
+  element: Pick<ExcalidrawTextElement, "customData">,
+  text: string,
+): boolean => {
+  const data = getInlineFormulaData(element);
+  return !!(
+    data &&
+    getInlineFormulaRuns(text, data).some((run) => run.type === "formula")
+  );
+};
+
 export const getInlineFormulaRenderSize = (
   record: InlineFormulaRecord,
   fontSize: number,

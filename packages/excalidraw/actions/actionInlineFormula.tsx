@@ -12,6 +12,7 @@
 import {
   CaptureUpdateAction,
   findInlineFormulaSourceRange,
+  hasRenderableInlineFormulaSource,
   refreshTextDimensions,
   type InlineFormulaSourceRange,
   withInlineFormulaRecord,
@@ -93,9 +94,16 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
     }
 
     const latestElement = app.scene.getElement(editingElement.id);
-    if (!latestElement || !isTextElement(latestElement) || latestElement.isDeleted) {
+    if (!latestElement || !isTextElement(latestElement)) {
       return false;
     }
+    // Opening the shared formula modal blurs the native textarea. A brand-new
+    // empty text element is therefore finalized as deleted before the user
+    // confirms the formula. Work with a live copy and resurrect the scene
+    // element only after a formula was actually confirmed.
+    const formulaElement = latestElement.isDeleted
+      ? { ...latestElement, isDeleted: false }
+      : latestElement;
 
     const replaceStart = existingRange?.start ?? selectionStart;
     const replaceEnd = existingRange?.end ?? selectionEnd;
@@ -105,11 +113,11 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
       source +
       originalText.slice(replaceEnd);
     const nextCustomData = withInlineFormulaRecord(
-      latestElement.customData,
+      formulaElement.customData,
       result,
     );
     const rawDimensions = refreshTextDimensions(
-      { ...latestElement, customData: nextCustomData },
+      { ...formulaElement, customData: nextCustomData },
       null,
       app.scene.getNonDeletedElementsMap(),
       nextOriginalText,
@@ -120,15 +128,23 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
     // Keep the Obsidian host's raw-text cache in sync. Without this callback,
     // a later double-click restores the pre-formula text from that cache.
     const submitResult = app.props.onBeforeTextSubmit?.(
-      latestElement,
+      formulaElement,
       rawDimensions.text,
       nextOriginalText,
       false,
     );
-    const nextDisplayedText =
+    const submittedDisplayText =
       submitResult?.updatedNextOriginalText ?? nextOriginalText;
+    const nextDisplayedText =
+      !submittedDisplayText.trim() &&
+      hasRenderableInlineFormulaSource(
+        { customData: nextCustomData },
+        nextOriginalText,
+      )
+        ? nextOriginalText
+        : submittedDisplayText;
     const dimensions = refreshTextDimensions(
-      { ...latestElement, customData: nextCustomData },
+      { ...formulaElement, customData: nextCustomData },
       null,
       app.scene.getNonDeletedElementsMap(),
       nextDisplayedText,
@@ -137,6 +153,7 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
       return false;
     }
     app.scene.mutateElement(latestElement, {
+      isDeleted: false,
       originalText: nextDisplayedText,
       rawText: nextOriginalText,
       customData: nextCustomData,
