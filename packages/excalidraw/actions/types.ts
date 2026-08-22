@@ -98,6 +98,7 @@ export type ActionName =
   | "zoomToFitSelectionInViewport"
   | "changeFontFamily"
   | "insertInlineFormula" // zsviczian -- Obsidian native-text formula action
+  | "toggleInlineBold" // zsviczian -- selection-level native text bold
   | "changeTextAlign"
   | "changeVerticalAlign"
   | "toggleFullScreen"

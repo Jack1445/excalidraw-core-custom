@@ -56,12 +56,15 @@ import {
 } from "./textElement";
 import { getLineHeightInPx } from "./textMeasurements";
 import {
-  getInlineFormulaData,
   getInlineFormulaImage,
-  getInlineFormulaLineWidth,
   getInlineFormulaRenderSize,
-  getInlineFormulaRuns,
 } from "./inlineFormula"; // zsviczian -- render formula runs without replacing native text
+import {
+  getInlineBoldFontString,
+  getInlineTextLineWidth,
+  getInlineTextRuns,
+  hasInlineTextFormatting,
+} from "./inlineTextStyle"; // zsviczian -- render partial bold and formulas as mixed runs
 import {
   isTextElement,
   isLinearElement,
@@ -364,7 +367,8 @@ const drawElementOnCanvas = (
 
       for (const shape of shapes) {
         if (typeof shape === "string") {
-          const { path, fillStyle } = (() => { //zsviczian
+          const { path, fillStyle } = (() => {
+            //zsviczian
             const path = element.customData?.strokeOptions
               ? new Path2D(getFreeDrawSvgPath(element))
               : new Path2D(shape);
@@ -441,8 +445,10 @@ const drawElementOnCanvas = (
 
         const shouldInvertImage =
           renderConfig.theme === THEME.DARK &&
-          ((cacheEntry?.mimeType === MIME_TYPES.svg && !element.customData?.doNotInvertSVGInDarkMode) ||
-            (!!element.customData?.pdfPageViewProps && (element.customData?.invertBitmapInDarkmode ?? true)) ||
+          ((cacheEntry?.mimeType === MIME_TYPES.svg &&
+            !element.customData?.doNotInvertSVGInDarkMode) ||
+            (!!element.customData?.pdfPageViewProps &&
+              (element.customData?.invertBitmapInDarkmode ?? true)) ||
             !!element.customData?.invertBitmapInDarkmode); //zsviczian
 
         if (shouldInvertImage && isIOS) {
@@ -528,9 +534,11 @@ const drawElementOnCanvas = (
         }
         context.canvas.setAttribute("dir", rtl ? "rtl" : "ltr");
         context.save();
-        context.font = getFontString(element);
-        const inlineFormulaData =
-          !rtl && !element.containerId ? getInlineFormulaData(element) : null; // zsviczian -- bound/RTL text remains untouched
+        const regularFont = getFontString(element);
+        const boldFont = getInlineBoldFontString(element);
+        context.font = regularFont;
+        const hasInlineFormatting =
+          !rtl && !element.containerId && hasInlineTextFormatting(element); // zsviczian -- bound/RTL text remains untouched
 
         context.fillStyle = applyDarkModeFilter(
           element.strokeColor,
@@ -558,19 +566,24 @@ const drawElementOnCanvas = (
           element.fontSize,
           lineHeightPx,
         );
+        let lineSourceOffset = 0;
 
         for (let index = 0; index < lines.length; index++) {
           const baselineY = index * lineHeightPx + verticalOffset;
-          const runs = inlineFormulaData
-            ? getInlineFormulaRuns(lines[index], inlineFormulaData)
+          const runs = hasInlineFormatting
+            ? getInlineTextRuns(lines[index], lineSourceOffset, element)
             : null;
-          const hasFormula = runs?.some((run) => run.type === "formula");
-          if (!runs || !hasFormula) {
+          const hasMixedRun = runs?.some(
+            (run) => run.type === "formula" || run.bold,
+          );
+          if (!runs || !hasMixedRun) {
+            context.font = regularFont;
             context.fillText(lines[index], horizontalOffset, baselineY);
+            lineSourceOffset += lines[index].length + 1;
             continue;
           }
 
-          const lineWidth = getInlineFormulaLineWidth(runs, element);
+          const lineWidth = getInlineTextLineWidth(runs, element);
           let cursorX =
             element.textAlign === "center"
               ? (element.width - lineWidth) / 2
@@ -580,11 +593,30 @@ const drawElementOnCanvas = (
           context.textAlign = "left";
           for (const run of runs) {
             if (run.type === "text") {
+              context.font = run.bold ? boldFont : regularFont;
+              if (run.bold) {
+                // Several handwritten/CJK fallback fonts only ship a regular
+                // face. DOM text synthesizes weight for them, while Canvas may
+                // silently render weight 700 exactly like weight 400. A thin
+                // same-color outline gives the finalized canvas the same
+                // visible weight as the native text editor without duplicating
+                // or offsetting the text element.
+                context.save();
+                context.lineWidth = Math.max(0.45, element.fontSize * 0.025);
+                context.lineJoin = "round";
+                context.strokeStyle = context.fillStyle;
+                context.strokeText(run.text, cursorX, baselineY);
+                context.restore();
+              }
               context.fillText(run.text, cursorX, baselineY);
               cursorX += context.measureText(run.text).width;
               continue;
             }
-            const size = getInlineFormulaRenderSize(run.record, element.fontSize);
+            context.font = regularFont;
+            const size = getInlineFormulaRenderSize(
+              run.record,
+              element.fontSize,
+            );
             const image = getInlineFormulaImage(run.record.dataURL, () => {
               elementWithCanvasCache.delete(element);
             });
@@ -601,6 +633,7 @@ const drawElementOnCanvas = (
             }
             cursorX += size.width;
           }
+          lineSourceOffset += lines[index].length + 1;
         }
         context.restore();
         if (shouldTemporarilyAttach) {
@@ -820,9 +853,14 @@ export const renderElement = (
   switch (element.type) {
     case "magicframe":
     case "frame": {
-      if ( //zsviczian
-        appState.frameRendering.enabled && appState.frameRendering.outline &&
-        !(!appState.frameRendering.markerEnabled && element.frameRole === "marker")
+      if (
+        //zsviczian
+        appState.frameRendering.enabled &&
+        appState.frameRendering.outline &&
+        !(
+          !appState.frameRendering.markerEnabled &&
+          element.frameRole === "marker"
+        )
       ) {
         context.save();
         context.translate(
@@ -857,7 +895,12 @@ export const renderElement = (
           context.setLineDash([dash, gap]);
         }
 
-        if (FRAME_STYLE.radius && context.roundRect && element.frameRole !== "marker") { //zsviczian
+        if (
+          FRAME_STYLE.radius &&
+          context.roundRect &&
+          element.frameRole !== "marker"
+        ) {
+          //zsviczian
           context.beginPath();
           context.roundRect(
             0,

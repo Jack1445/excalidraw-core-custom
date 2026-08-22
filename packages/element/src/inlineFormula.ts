@@ -20,6 +20,7 @@ import {
   getLineWidth,
   getTextHeight,
 } from "./textMeasurements";
+import { getWrappedTextLines } from "./textWrapping";
 
 export const INLINE_FORMULA_CUSTOM_DATA_KEY =
   "obsidianInlineFormulas" as const;
@@ -200,7 +201,7 @@ export const findInlineFormulaAtScenePoint = (
   sceneX: number,
   sceneY: number,
 ): InlineFormulaSourceRange | null => {
-  if (element.containerId || !element.autoResize || isRTL(element.text)) {
+  if (element.containerId || isRTL(element.text)) {
     return null;
   }
   const data = getInlineFormulaData(element);
@@ -220,7 +221,12 @@ export const findInlineFormulaAtScenePoint = (
   const localY = centerY + dx * sin + dy * cos - element.y;
 
   const sourceText = element.rawText ?? element.originalText ?? element.text;
-  const lines = sourceText.replace(/\r\n?/g, "\n").split("\n");
+  const font = getFontString(element);
+  const lines = getWrappedTextLines(
+    sourceText.replace(/\r\n?/g, "\n"),
+    font,
+    element.autoResize ? Infinity : element.width,
+  );
   const lineHeightPx = getLineHeightInPx(
     element.fontSize,
     element.lineHeight,
@@ -230,15 +236,12 @@ export const findInlineFormulaAtScenePoint = (
     element.fontSize,
     lineHeightPx,
   );
-  const font = getFontString(element);
   const tolerance = Math.max(3, element.fontSize * 0.12);
-  let lineSourceOffset = 0;
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
+    const { text: line, start: lineSourceOffset } = lines[lineIndex];
     const runs = getInlineFormulaRuns(line, data);
     if (!runs.some((run) => run.type === "formula")) {
-      lineSourceOffset += line.length + 1;
       continue;
     }
     const lineWidth = getInlineFormulaLineWidth(runs, element);
@@ -275,7 +278,6 @@ export const findInlineFormulaAtScenePoint = (
       cursorX += size.width;
       runSourceOffset += run.source.length;
     }
-    lineSourceOffset += line.length + 1;
   }
   return null;
 };

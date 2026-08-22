@@ -507,7 +507,21 @@ import type {
 } from "../types";
 import type { RoughCanvas } from "roughjs/bin/canvas";
 import type { Action, ActionName, ActionResult } from "../actions/types";
-import { allowDoubleTapEraser, disableDoubleClickTextEditing, getExcalidrawContentEl, getMaxZoom, getZoomStep, hideFreedrawPenmodeCursor, isTouchInPenMode, isPanWithRightMouseEnabled, shouldDisableZoom, isContextMenuDisabled, refreshAllArrows, syncElementLinkWithText, getSharedMermaidInstance } from "../obsidianUtils";
+import {
+  allowDoubleTapEraser,
+  disableDoubleClickTextEditing,
+  getExcalidrawContentEl,
+  getMaxZoom,
+  getZoomStep,
+  hideFreedrawPenmodeCursor,
+  isTouchInPenMode,
+  isPanWithRightMouseEnabled,
+  shouldDisableZoom,
+  isContextMenuDisabled,
+  refreshAllArrows,
+  syncElementLinkWithText,
+  getSharedMermaidInstance,
+} from "../obsidianUtils";
 import { initializeObsidianUtils } from "@excalidraw/common";
 import { getTooltipDiv } from "./Tooltip";
 import { getFontSize } from "../actions/actionProperties";
@@ -728,7 +742,6 @@ class App extends React.Component<AppProps, AppState> {
   /** previous frame pointer coords */
   previousPointerMoveCoords: { x: number; y: number } | null = null;
   allowMobileMode: boolean = true; //zsviczian
-
 
   drawShape = new AppDrawShape(this);
   laserTrails = new LaserTrails(this);
@@ -966,7 +979,8 @@ class App extends React.Component<AppProps, AppState> {
   public isNavigationEnabled(
     props: Pick<AppProps, "interaction"> = this.props,
   ): boolean {
-    if (isPanWithRightMouseEnabled()) { //zsviczian #329 Miro-style right-button panning is canvas navigation
+    if (isPanWithRightMouseEnabled()) {
+      //zsviczian #329 Miro-style right-button panning is canvas navigation
       return true;
     }
     if (typeof props.interaction === "object" && props.interaction !== null) {
@@ -1816,13 +1830,15 @@ class App extends React.Component<AppProps, AppState> {
           );
 
           //zsviczian - shouldRenderAllEmbeddables
-          const isVisible = this.shouldRenderAllEmbeddables || isElementInViewport(
-            el,
-            normalizedWidth,
-            normalizedHeight,
-            this.state,
-            this.scene.getNonDeletedElementsMap(),
-          );
+          const isVisible =
+            this.shouldRenderAllEmbeddables ||
+            isElementInViewport(
+              el,
+              normalizedWidth,
+              normalizedHeight,
+              this.state,
+              this.scene.getNonDeletedElementsMap(),
+            );
           const hasBeenInitialized = this.initializedEmbeds.has(el.id);
 
           if (isVisible && !hasBeenInitialized) {
@@ -2083,7 +2099,10 @@ class App extends React.Component<AppProps, AppState> {
                       (isWebview ? ( //zsviczian
                         <webview
                           ref={(ref) =>
-                            this.cacheEmbeddableRef(el, ref as HTMLIFrameElement)
+                            this.cacheEmbeddableRef(
+                              el,
+                              ref as HTMLIFrameElement,
+                            )
                           }
                           className="excalidraw__embeddable"
                           src={
@@ -2105,7 +2124,9 @@ class App extends React.Component<AppProps, AppState> {
                               : undefined
                           }
                           src={
-                            src?.type !== "document" ? src?.link ?? "" : undefined
+                            src?.type !== "document"
+                              ? src?.link ?? ""
+                              : undefined
                           }
                           // https://stackoverflow.com/q/18470015
                           // scrolling="no" //zsviczian
@@ -2119,8 +2140,7 @@ class App extends React.Component<AppProps, AppState> {
                               : ""
                           } allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads`}
                         />
-                      )
-                    )}
+                      ))}
                   </div>
                 </div>
               </div>
@@ -2199,9 +2219,13 @@ class App extends React.Component<AppProps, AppState> {
 
     const isDarkTheme = this.state.theme === THEME.DARK;
     //zsviczian
-    const nonDeletedFramesLikes = this.state.frameRendering.markerName && this.state.frameRendering.markerEnabled
-      ? this.scene.getNonDeletedFramesLikes()
-      : this.scene.getNonDeletedFramesLikes().filter(f => f.frameRole !== "marker");
+    const nonDeletedFramesLikes =
+      this.state.frameRendering.markerName &&
+      this.state.frameRendering.markerEnabled
+        ? this.scene.getNonDeletedFramesLikes()
+        : this.scene
+            .getNonDeletedFramesLikes()
+            .filter((f) => f.frameRole !== "marker");
 
     const focusedSearchMatch =
       nonDeletedFramesLikes.length > 0
@@ -2646,45 +2670,47 @@ class App extends React.Component<AppProps, AppState> {
                               </ElementCanvasButtons>
                             )}
 
-                          {(this.isDefaultUIEnabled() || isPanWithRightMouseEnabled()) && this.state.contextMenu && ( //zsviczian #329 render the Miro-style keyboard context menu
-                            <ContextMenu
-                              items={this.state.contextMenu.items}
-                              top={this.state.contextMenu.top}
-                              left={this.state.contextMenu.left}
-                              actionManager={this.actionManager}
-                              onClose={(callback) => {
-                                this.setState({ contextMenu: null }, () => {
-                                  this.focusContainer();
-                                  callback?.();
-                                });
-                              }}
-                            />
-                          )}
+                          {(this.isDefaultUIEnabled() ||
+                            isPanWithRightMouseEnabled()) &&
+                            this.state.contextMenu && ( //zsviczian #329 render the Miro-style keyboard context menu
+                              <ContextMenu
+                                items={this.state.contextMenu.items}
+                                top={this.state.contextMenu.top}
+                                left={this.state.contextMenu.left}
+                                actionManager={this.actionManager}
+                                onClose={(callback) => {
+                                  this.setState({ contextMenu: null }, () => {
+                                    this.focusContainer();
+                                    callback?.();
+                                  });
+                                }}
+                              />
+                            )}
                           {newElementCanvasElement &&
-                          isHighlighter && ( //zsviczian
-                            <NewElementCanvas
-                              appState={this.state}
-                              newElement={newElementCanvasElement}
-                              scale={window.devicePixelRatio}
-                              rc={this.rc}
-                              elementsMap={renderableElementsMap}
-                              allElementsMap={allElementsMap}
-                              renderConfig={{
-                                imageCache: this.imageCache,
-                                isExporting: false,
-                                renderGrid: false,
-                                canvasBackgroundColor:
-                                  this.state.viewBackgroundColor,
-                                embedsValidationStatus:
-                                  this.embedsValidationStatus,
-                                elementsPendingErasure:
-                                  this.elementsPendingErasure,
-                                pendingFlowchartNodes: null,
-                                theme: this.state.theme,
-                                isHighlighterPenDrawing: isHighlighter, //zsviczian
-                              }}
-                            />
-                          )}
+                            isHighlighter && ( //zsviczian
+                              <NewElementCanvas
+                                appState={this.state}
+                                newElement={newElementCanvasElement}
+                                scale={window.devicePixelRatio}
+                                rc={this.rc}
+                                elementsMap={renderableElementsMap}
+                                allElementsMap={allElementsMap}
+                                renderConfig={{
+                                  imageCache: this.imageCache,
+                                  isExporting: false,
+                                  renderGrid: false,
+                                  canvasBackgroundColor:
+                                    this.state.viewBackgroundColor,
+                                  embedsValidationStatus:
+                                    this.embedsValidationStatus,
+                                  elementsPendingErasure:
+                                    this.elementsPendingErasure,
+                                  pendingFlowchartNodes: null,
+                                  theme: this.state.theme,
+                                  isHighlighterPenDrawing: isHighlighter, //zsviczian
+                                }}
+                              />
+                            )}
                           <StaticCanvas
                             canvas={this.canvas}
                             rc={this.rc}
@@ -2714,30 +2740,31 @@ class App extends React.Component<AppProps, AppState> {
                               isHighlighterPenDrawing: isHighlighter, //zsviczian
                             }}
                           />
-                          {newElementCanvasElement && !isHighlighter && ( //zsviczian
-                            <NewElementCanvas
-                              appState={this.state}
-                              newElement={newElementCanvasElement}
-                              scale={window.devicePixelRatio}
-                              rc={this.rc}
-                              elementsMap={renderableElementsMap}
-                              allElementsMap={allElementsMap}
-                              renderConfig={{
-                                imageCache: this.imageCache,
-                                isExporting: false,
-                                renderGrid: false,
-                                canvasBackgroundColor:
-                                  this.state.viewBackgroundColor,
-                                embedsValidationStatus:
-                                  this.embedsValidationStatus,
-                                elementsPendingErasure:
-                                  this.elementsPendingErasure,
-                                pendingFlowchartNodes: null,
-                                theme: this.state.theme,
-                                isHighlighterPenDrawing: isHighlighter, //zsviczian
-                              }}
-                            />
-                          )}
+                          {newElementCanvasElement &&
+                            !isHighlighter && ( //zsviczian
+                              <NewElementCanvas
+                                appState={this.state}
+                                newElement={newElementCanvasElement}
+                                scale={window.devicePixelRatio}
+                                rc={this.rc}
+                                elementsMap={renderableElementsMap}
+                                allElementsMap={allElementsMap}
+                                renderConfig={{
+                                  imageCache: this.imageCache,
+                                  isExporting: false,
+                                  renderGrid: false,
+                                  canvasBackgroundColor:
+                                    this.state.viewBackgroundColor,
+                                  embedsValidationStatus:
+                                    this.embedsValidationStatus,
+                                  elementsPendingErasure:
+                                    this.elementsPendingErasure,
+                                  pendingFlowchartNodes: null,
+                                  theme: this.state.theme,
+                                  isHighlighterPenDrawing: isHighlighter, //zsviczian
+                                }}
+                              />
+                            )}
                           <InteractiveCanvas
                             app={this}
                             containerRef={this.excalidrawContainerRef}
@@ -3731,8 +3758,12 @@ class App extends React.Component<AppProps, AppState> {
   };
 
   private getFormFactor = (editorWidth: number, editorHeight: number) => {
-    if (this.props.UIOptions.getFormFactor?.(editorWidth, editorHeight) === "phone" && !this.allowMobileMode) {
-      return getFormFactor(editorWidth, editorHeight, this.allowMobileMode) //zsviczian
+    if (
+      this.props.UIOptions.getFormFactor?.(editorWidth, editorHeight) ===
+        "phone" &&
+      !this.allowMobileMode
+    ) {
+      return getFormFactor(editorWidth, editorHeight, this.allowMobileMode); //zsviczian
     }
     return (
       this.props.UIOptions.getFormFactor?.(editorWidth, editorHeight) ??
@@ -3823,7 +3854,11 @@ class App extends React.Component<AppProps, AppState> {
       if (isInitializedImageElement(element) && files[element.fileId]) {
         //zsviczian cancel any pending image load promises to avoid memory leaks
         const cacheData = this.imageCache.get(element.fileId);
-        if (cacheData && cacheData.image instanceof Promise && typeof (cacheData.image as any).cancel === "function") {
+        if (
+          cacheData &&
+          cacheData.image instanceof Promise &&
+          typeof (cacheData.image as any).cancel === "function"
+        ) {
           (cacheData.image as any).cancel();
         }
 
@@ -3888,10 +3923,11 @@ class App extends React.Component<AppProps, AppState> {
     }
 
     this.scene.onUpdate(this.triggerRender);
-    this.unsubscribeInlineFormulaImageLoad =
-      subscribeToInlineFormulaImageLoad(() => {
+    this.unsubscribeInlineFormulaImageLoad = subscribeToInlineFormulaImageLoad(
+      () => {
         this.scene.triggerUpdate();
-      }); // zsviczian -- formula data URLs load independently of BinaryFiles
+      },
+    ); // zsviczian -- formula data URLs load independently of BinaryFiles
     this.addEventListeners();
 
     if (this.props.autoFocus && this.excalidrawContainerRef.current) {
@@ -3969,7 +4005,10 @@ class App extends React.Component<AppProps, AppState> {
 
     //zsviczian
     for (const data of this.imageCache.values()) {
-      if (data.image instanceof Promise && typeof (data.image as any).cancel === "function") {
+      if (
+        data.image instanceof Promise &&
+        typeof (data.image as any).cancel === "function"
+      ) {
         (data.image as any).cancel();
       }
     }
@@ -4848,7 +4887,8 @@ class App extends React.Component<AppProps, AppState> {
 
       if (this.props.onPaste) {
         try {
-          if ((await this.props.onPaste(data, event, filesList)) === false) { //zsviczian
+          if ((await this.props.onPaste(data, event, filesList)) === false) {
+            //zsviczian
             return;
           }
         } catch (error: any) {
@@ -5273,7 +5313,8 @@ class App extends React.Component<AppProps, AppState> {
           outline: next?.outline ?? prevState.frameRendering.outline,
           //zsviczian
           markerName: next?.markerName ?? prevState.frameRendering.markerName,
-          markerEnabled: next?.markerEnabled ?? prevState.frameRendering.markerEnabled,
+          markerEnabled:
+            next?.markerEnabled ?? prevState.frameRendering.markerEnabled,
         },
       };
     });
@@ -5345,10 +5386,10 @@ class App extends React.Component<AppProps, AppState> {
   //zsviczian
   setForceRenderAllEmbeddables = (force: boolean) => {
     this.shouldRenderAllEmbeddables = force;
-    if(force) {
+    if (force) {
       this.setState({});
     }
-  }
+  };
 
   //zsviczian
   zoomToFit = (
@@ -5415,7 +5456,8 @@ class App extends React.Component<AppProps, AppState> {
     el: ExcalidrawLinearElement,
     selectedPointsIndices: number[] | null = null,
   ) => {
-    if (!el || !isLinearElement(el) || el.isDeleted) { //zsviczian
+    if (!el || !isLinearElement(el) || el.isDeleted) {
+      //zsviczian
       return;
     }
 
@@ -5694,7 +5736,7 @@ class App extends React.Component<AppProps, AppState> {
       if (sceneData.forceFlushSync === true) {
         flushSync(() => {
           if (appState) {
-           this.setState(appState as Pick<AppState, K> | null);
+            this.setState(appState as Pick<AppState, K> | null);
           }
         });
       } else if (appState) {
@@ -5953,14 +5995,12 @@ class App extends React.Component<AppProps, AppState> {
       //mfuria #329. open context menu with 'm' if not editing text and container focused
       if (
         isPanWithRightMouseEnabled() &&
-        event.key.toLowerCase() === 'm' &&
+        event.key.toLowerCase() === "m" &&
         !this.state.editingTextElement &&
         // don't trigger when typing in inputs
         !isInputLike(event.target) &&
         // ensure focus is within excalidraw container
-        this.excalidrawContainerRef?.current?.contains(
-          document.activeElement,
-        )
+        this.excalidrawContainerRef?.current?.contains(document.activeElement)
       ) {
         //zsviczian START #329 trigger the canonical context-menu action at the current cursor position
         this.handleCanvasContextMenu(
@@ -5970,9 +6010,7 @@ class App extends React.Component<AppProps, AppState> {
             clientY: this.viewport.lastPosition.y,
             nativeEvent: new MouseEvent("contextmenu"),
             preventDefault: () => event.preventDefault(),
-          } as unknown as React.MouseEvent<
-            HTMLElement | HTMLCanvasElement
-          >,
+          } as unknown as React.MouseEvent<HTMLElement | HTMLCanvasElement>,
           true,
         );
         //zsviczian END
@@ -6844,7 +6882,9 @@ class App extends React.Component<AppProps, AppState> {
                 ? rawText
                 : submittedDisplayText;
             hasTextLink = !!nextLink;
-            link = syncElementLinkWithText() ? nextLink : element.link ?? undefined;
+            link = syncElementLinkWithText()
+              ? nextLink
+              : element.link ?? undefined;
           }
         }
         //zsviczian insert end
@@ -7802,11 +7842,12 @@ class App extends React.Component<AppProps, AppState> {
         }
 
         //zsviczian Disable double click text create, but allow double click edit
-        if(disableDoubleClickTextEditing()) {
-          let existingTextElement: NonDeleted<ExcalidrawTextElement> | null = null;
+        if (disableDoubleClickTextEditing()) {
+          let existingTextElement: NonDeleted<ExcalidrawTextElement> | null =
+            null;
 
           const selectedElements = this.scene.getSelectedElements(this.state);
-      
+
           if (selectedElements.length === 1) {
             if (isTextElement(selectedElements[0])) {
               existingTextElement = selectedElements[0];
@@ -7816,7 +7857,10 @@ class App extends React.Component<AppProps, AppState> {
                 this.scene.getNonDeletedElementsMap(),
               );
             } else {
-              existingTextElement = this.getTextElementAtPosition(sceneX, sceneY);
+              existingTextElement = this.getTextElementAtPosition(
+                sceneX,
+                sceneY,
+              );
             }
           } else {
             existingTextElement = this.getTextElementAtPosition(sceneX, sceneY);
@@ -7931,7 +7975,8 @@ class App extends React.Component<AppProps, AppState> {
     if (lastPointerDownHittingLinkIcon && lastPointerUpHittingLinkIcon) {
       hideHyperlinkToolip();
       let url = this.hitLinkElement.link;
-      if (url || this.hitLinkElement.hasTextLink) { //zsviczian
+      if (url || this.hitLinkElement.hasTextLink) {
+        //zsviczian
         url = normalizeLink(url ?? ""); //zsviczian
         let customEvent;
         if (this.props.onLinkOpen) {
@@ -7963,7 +8008,7 @@ class App extends React.Component<AppProps, AppState> {
    * link is being hovered.
    */
   private applyElementLinkHoverAffordance = (
-    event: React.PointerEvent<HTMLCanvasElement> //zsviczian
+    event: React.PointerEvent<HTMLCanvasElement>, //zsviczian
   ): boolean => {
     if (
       this.hitLinkElement &&
@@ -8054,7 +8099,8 @@ class App extends React.Component<AppProps, AppState> {
     this.hitLinkElement = this.isLinksEnabled()
       ? this.getElementLinkAtPosition(scenePointer, hitElementMightBeLocked)
       : undefined;
-    if (!this.applyElementLinkHoverAffordance(event)) { //zsviczian
+    if (!this.applyElementLinkHoverAffordance(event)) {
+      //zsviczian
       this.cursor.reset();
     }
   };
@@ -8103,13 +8149,12 @@ class App extends React.Component<AppProps, AppState> {
     },
   ) => {
     const elementsMap = this.scene.getNonDeletedElementsMap();
-    const framesUnderCursor = this.scene
-      .getNonDeletedFramesLikes()
-      .filter(
-        (frame) =>
-          !frame.locked && isCursorInFrame(sceneCoords, frame, elementsMap) &&
-          frame.frameRole !== "marker", //zsviczian
-      );
+    const framesUnderCursor = this.scene.getNonDeletedFramesLikes().filter(
+      (frame) =>
+        !frame.locked &&
+        isCursorInFrame(sceneCoords, frame, elementsMap) &&
+        frame.frameRole !== "marker", //zsviczian
+    );
 
     if (!framesUnderCursor.length) {
       return null;
@@ -8199,7 +8244,10 @@ class App extends React.Component<AppProps, AppState> {
     );
   };
 
-  public insertNewElements = (elements: readonly ExcalidrawElement[], idx?: number) => {
+  public insertNewElements = (
+    elements: readonly ExcalidrawElement[],
+    idx?: number,
+  ) => {
     //zsviczian added idx for highligher pens
     if (!elements.length) {
       return;
@@ -8299,11 +8347,10 @@ class App extends React.Component<AppProps, AppState> {
     ) {
       if (isOverScrollBar) {
         //zsviczian https://github.com/zsviczian/obsidian-excalidraw-plugin/issues/1659
-        const cursor = isPenFreedraw &&
-          this.interactiveCanvas &&
-          hideFreedrawPenmodeCursor()
-          ? "none"
-          : CURSOR_TYPE.AUTO;
+        const cursor =
+          isPenFreedraw && this.interactiveCanvas && hideFreedrawPenmodeCursor()
+            ? "none"
+            : CURSOR_TYPE.AUTO;
         this.cursor.set(cursor);
       } else {
         this.cursor.applyForTool();
@@ -8988,7 +9035,7 @@ class App extends React.Component<AppProps, AppState> {
       const onContextMenu = (e: MouseEvent) => {
         e.preventDefault();
       };
-      window.addEventListener('contextmenu', onContextMenu, { once: true });
+      window.addEventListener("contextmenu", onContextMenu, { once: true });
 
       // Start right-click panning
       this.startRightClickPanning(event);
@@ -9727,9 +9774,7 @@ class App extends React.Component<AppProps, AppState> {
   };
 
   //mfuria #329. start right-click panning
-  private startRightClickPanning(
-    event: React.PointerEvent<HTMLElement>,
-  ): void {
+  private startRightClickPanning(event: React.PointerEvent<HTMLElement>): void {
     // Set up right-click panning similar to hand tool
     isPanning = true;
     this.focusContainer();
@@ -9776,7 +9821,7 @@ class App extends React.Component<AppProps, AppState> {
       passive: true,
     });
     window.addEventListener(EVENT.POINTER_UP, teardown);
-  };
+  }
 
   private updateGestureOnPointerDown(
     event: React.PointerEvent<HTMLElement>,
@@ -9787,7 +9832,8 @@ class App extends React.Component<AppProps, AppState> {
     });
 
     if (gesture.pointers.size === 2) {
-      if (shouldDisableZoom(this.state)) { //zsviczian
+      if (shouldDisableZoom(this.state)) {
+        //zsviczian
         gesture.initialDistance = null;
       } else {
         gesture.lastCenter = getCenter(gesture.pointers);
@@ -10179,10 +10225,8 @@ class App extends React.Component<AppProps, AppState> {
           (el) => this.state.selectedElementIds[el.id],
         ); //zsviczian
         // Prioritize unlocked elements over locked ones
-        if (
-          !isUnlockedHitElSelected &&
-          unlockedHitElements.length > 0
-        ) { //zsviczian https://github.com/excalidraw/excalidraw/pull/9582
+        if (!isUnlockedHitElSelected && unlockedHitElements.length > 0) {
+          //zsviczian https://github.com/excalidraw/excalidraw/pull/9582
           // If there are unlocked elements, use the topmost one
           pointerDownState.hit.element =
             unlockedHitElements[unlockedHitElements.length - 1];
@@ -12525,7 +12569,11 @@ class App extends React.Component<AppProps, AppState> {
           newElement &&
           !multiElement
         ) {
-          if (this.editorInterface.isTouchScreen && newElement.points.length > 1) { //zsviczian
+          if (
+            this.editorInterface.isTouchScreen &&
+            newElement.points.length > 1
+          ) {
+            //zsviczian
             const FIXED_DELTA_X = Math.min(
               (this.state.width * 0.7) / this.state.zoom.value,
               100,
@@ -13124,8 +13172,7 @@ class App extends React.Component<AppProps, AppState> {
       if (
         this.lastPointerUpIsDoubleClick &&
         isTextElement(hitElement) &&
-        !hitElement.containerId &&
-        hitElement.autoResize
+        !hitElement.containerId
       ) {
         const formulaRange = findInlineFormulaAtScenePoint(
           hitElement,
@@ -13153,8 +13200,9 @@ class App extends React.Component<AppProps, AppState> {
         childEvent.pointerType !== "touch" &&
         hitElement &&
         ((isTextElement(hitElement) &&
-          this.state.selectedElementIds[hitElement.id] &&
-          this.scene.getSelectedElements(this.state).length === 1) ||
+          (this.lastPointerUpIsDoubleClick ||
+            (this.state.selectedElementIds[hitElement.id] &&
+              this.scene.getSelectedElements(this.state).length === 1))) ||
           selectedTextEditingContainer)
       ) {
         this.startTextEditing({
@@ -13779,7 +13827,8 @@ class App extends React.Component<AppProps, AppState> {
   };
 
   private handleAppOnDrop = async (event: React.DragEvent<HTMLDivElement>) => {
-    if (this.props.onDrop) { //zsviczian
+    if (this.props.onDrop) {
+      //zsviczian
       try {
         if ((await this.props.onDrop(event)) === false) {
           return;
@@ -14006,7 +14055,8 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
     event.preventDefault();
-    if (this.state.disableContextMenu) { //zsviczian
+    if (this.state.disableContextMenu) {
+      //zsviczian
       return;
     }
     //mfuria #329. if right-click pan is enabled, we suppress opening our custom menu too.

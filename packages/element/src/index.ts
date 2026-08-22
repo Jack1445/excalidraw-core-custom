@@ -81,6 +81,7 @@ export * from "./groups";
 export * from "./heading";
 export * from "./image";
 export * from "./inlineFormula"; // zsviczian -- native-text inline formulas for Obsidian
+export * from "./inlineTextStyle"; // zsviczian -- selection-level native text styles
 export * from "./linearElementEditor";
 export * from "./mutateElement";
 export * from "./newElement";

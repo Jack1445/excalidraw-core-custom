@@ -201,7 +201,10 @@ export const SelectedShapeActions = ({
           {renderAction("changeFontSize")}
           {appState.editingTextElement &&
             !appState.editingTextElement.containerId &&
-            renderAction("insertInlineFormula")}{/* zsviczian -- additive native-text formula control */}
+            <>
+              {renderAction("toggleInlineBold")}
+              {renderAction("insertInlineFormula")}
+            </>}{/* zsviczian -- additive native-text rich controls */}
           {predicates.textAlign && renderAction("changeTextAlign")}
         </>
       )}
@@ -513,7 +516,10 @@ const CombinedTextProperties = ({
               {predicates.text && renderAction("changeFontSize")}
               {appState.editingTextElement &&
                 !appState.editingTextElement.containerId &&
-                renderAction("insertInlineFormula")}{/* zsviczian -- keep the control inside the existing text popover */}
+                <>
+                  {renderAction("toggleInlineBold")}
+                  {renderAction("insertInlineFormula")}
+                </>}{/* zsviczian -- keep rich controls inside the existing text popover */}
               {predicates.textAlign && renderAction("changeTextAlign")}
               {predicates.verticalAlign && renderAction("changeVerticalAlign")}
             </div>

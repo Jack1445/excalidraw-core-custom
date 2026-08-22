@@ -21,12 +21,13 @@ import {
 import { LinearElementEditor } from "@excalidraw/element";
 import { getBoundTextElement, getContainerElement } from "@excalidraw/element";
 import { getLineHeightInPx } from "@excalidraw/element";
+import { getInlineFormulaRenderSize } from "@excalidraw/element"; // zsviczian -- export native text with inline formula images
 import {
-  getInlineFormulaData,
-  getInlineFormulaLineWidth,
-  getInlineFormulaRenderSize,
-  getInlineFormulaRuns,
-} from "@excalidraw/element"; // zsviczian -- export native text with inline formula images
+  getInlineBoldFontString,
+  getInlineTextLineWidth,
+  getInlineTextRuns,
+  hasInlineTextFormatting,
+} from "@excalidraw/element"; // zsviczian -- export partial bold and formulas
 import {
   isArrowElement,
   isIframeLikeElement,
@@ -53,7 +54,6 @@ import type { RenderableElementsMap, SVGRenderConfig } from "../scene/types";
 import type { AppState, BinaryFiles } from "../types";
 import type { Drawable } from "roughjs/bin/core";
 import type { RoughSVG } from "roughjs/bin/svg";
-
 
 const roughSVGDrawWithPrecision = (
   rsvg: RoughSVG,
@@ -502,7 +502,8 @@ const renderElementToSvg = (
         isInitializedImageElement(element) && files[element.fileId];
       if (fileData) {
         const { reuseImages = true } = renderConfig;
-        let suffix = fileData.mimeType === "image/svg+xml" &&
+        let suffix =
+          fileData.mimeType === "image/svg+xml" &&
           element.customData?.doNotInvertSVGInDarkMode
             ? "-no-invert-svg"
             : element.customData?.invertBitmapInDarkmode
@@ -591,8 +592,10 @@ const renderElementToSvg = (
 
         if (
           renderConfig.theme === THEME.DARK &&
-          ((fileData.mimeType === MIME_TYPES.svg && !element.customData?.doNotInvertSVGInDarkMode) ||
-            (!!element.customData?.pdfPageViewProps && (element.customData?.invertBitmapInDarkmode ?? true)) ||
+          ((fileData.mimeType === MIME_TYPES.svg &&
+            !element.customData?.doNotInvertSVGInDarkMode) ||
+            (!!element.customData?.pdfPageViewProps &&
+              (element.customData?.invertBitmapInDarkmode ?? true)) ||
             !!element.customData?.invertBitmapInDarkmode) //zsviczian
         ) {
           g.setAttribute("filter", DARK_THEME_FILTER);
@@ -671,8 +674,10 @@ const renderElementToSvg = (
       if (
         renderConfig.frameRendering.enabled &&
         renderConfig.frameRendering.outline &&
-        !(!renderConfig.frameRendering.markerEnabled &&
-          element.frameRole === "marker") //zsviczian
+        !(
+          !renderConfig.frameRendering.markerEnabled &&
+          element.frameRole === "marker"
+        ) //zsviczian
       ) {
         const rect = document.createElementNS(SVG_NS, "rect");
 
@@ -700,7 +705,7 @@ const renderElementToSvg = (
             return applyDarkModeFilter(
               color, //zsviczian
               renderConfig.theme === THEME.DARK,
-            )
+            );
           })(),
         );
         rect.setAttribute(
@@ -745,29 +750,53 @@ const renderElementToSvg = (
           lineHeightPx,
         );
         const direction = isRTL(element.text) ? "rtl" : "ltr";
-        const inlineFormulaData =
-          direction === "ltr" && !element.containerId
-            ? getInlineFormulaData(element)
-            : null; // zsviczian -- bound/RTL text keeps upstream rendering
+        const hasInlineFormatting =
+          direction === "ltr" &&
+          !element.containerId &&
+          hasInlineTextFormatting(element); // zsviczian -- bound/RTL text keeps upstream rendering
         const textAnchor =
           element.textAlign === "center"
             ? "middle"
             : element.textAlign === "right" || direction === "rtl"
             ? "end"
             : "start";
+        let lineSourceOffset = 0;
         for (let i = 0; i < lines.length; i++) {
           const baselineY = i * lineHeightPx + verticalOffset;
-          const runs = inlineFormulaData
-            ? getInlineFormulaRuns(lines[i], inlineFormulaData)
+          const runs = hasInlineFormatting
+            ? getInlineTextRuns(lines[i], lineSourceOffset, element)
             : null;
-          const hasFormula = runs?.some((run) => run.type === "formula");
-          const renderText = (value: string, x: number, anchor = "start") => {
+          const hasMixedRun = runs?.some(
+            (run) => run.type === "formula" || run.bold,
+          );
+          const renderText = (
+            value: string,
+            x: number,
+            anchor = "start",
+            bold = false,
+          ) => {
             const text = svgRoot.ownerDocument.createElementNS(SVG_NS, "text");
             text.textContent = value;
             text.setAttribute("x", `${x}`);
             text.setAttribute("y", `${baselineY}`);
             text.setAttribute("font-family", getFontFamilyString(element));
             text.setAttribute("font-size", `${element.fontSize}px`);
+            if (bold) {
+              text.setAttribute("font-weight", "700");
+              text.setAttribute(
+                "stroke",
+                applyDarkModeFilter(
+                  element.strokeColor,
+                  renderConfig.theme === THEME.DARK,
+                ),
+              );
+              text.setAttribute(
+                "stroke-width",
+                `${Math.max(0.45, element.fontSize * 0.025)}`,
+              );
+              text.setAttribute("stroke-linejoin", "round");
+              text.setAttribute("paint-order", "stroke fill");
+            }
             text.setAttribute(
               "fill",
               applyDarkModeFilter(
@@ -781,11 +810,12 @@ const renderElementToSvg = (
             text.setAttribute("dominant-baseline", "alphabetic");
             node.appendChild(text);
           };
-          if (!runs || !hasFormula) {
+          if (!runs || !hasMixedRun) {
             renderText(lines[i], horizontalOffset, textAnchor);
+            lineSourceOffset += lines[i].length + 1;
             continue;
           }
-          const lineWidth = getInlineFormulaLineWidth(runs, element);
+          const lineWidth = getInlineTextLineWidth(runs, element);
           let cursorX =
             element.textAlign === "center"
               ? (element.width - lineWidth) / 2
@@ -794,16 +824,24 @@ const renderElementToSvg = (
               : 0;
           for (const run of runs) {
             if (run.type === "text") {
-              renderText(run.text, cursorX);
+              renderText(run.text, cursorX, "start", run.bold);
               const measuringContext = document
                 .createElement("canvas")
                 .getContext("2d")!;
-              measuringContext.font = `${element.fontSize}px ${getFontFamilyString(element)}`;
+              measuringContext.font = run.bold
+                ? getInlineBoldFontString(element)
+                : `${element.fontSize}px ${getFontFamilyString(element)}`;
               cursorX += measuringContext.measureText(run.text).width;
               continue;
             }
-            const size = getInlineFormulaRenderSize(run.record, element.fontSize);
-            const image = svgRoot.ownerDocument.createElementNS(SVG_NS, "image");
+            const size = getInlineFormulaRenderSize(
+              run.record,
+              element.fontSize,
+            );
+            const image = svgRoot.ownerDocument.createElementNS(
+              SVG_NS,
+              "image",
+            );
             image.setAttribute("href", run.record.dataURL);
             image.setAttribute("x", `${cursorX}`);
             image.setAttribute("y", `${baselineY - size.height * 0.8}`);
@@ -812,6 +850,7 @@ const renderElementToSvg = (
             node.appendChild(image);
             cursorX += size.width;
           }
+          lineSourceOffset += lines[i].length + 1;
         }
 
         const g = maybeWrapNodesInFrameClipPath(

@@ -26,7 +26,7 @@ import { newElementWith } from "./mutateElement";
 import { getBoundTextMaxWidth } from "./textElement";
 import { normalizeText, measureText } from "./textMeasurements";
 import { wrapText } from "./textWrapping";
-import { getInlineFormulaTextMetrics } from "./inlineFormula"; // zsviczian -- preserve native text metrics around inline formulas
+import { getInlineTextMetrics } from "./inlineTextStyle"; // zsviczian -- mixed bold/formula metrics
 
 import { isLineElement } from "./typeChecks";
 
@@ -376,7 +376,7 @@ const getAdjustedDimensions = (
     element.autoResize
   ) {
     const prevMetrics =
-      getInlineFormulaTextMetrics(element, element.text) ??
+      getInlineTextMetrics(element, element.text) ??
       measureText(
         element.text,
         getFontString(element),
@@ -505,7 +505,7 @@ export const refreshTextDimensions = (
     textElement,
     elementsMap,
     text,
-    getInlineFormulaTextMetrics(textElement, text),
+    getInlineTextMetrics(textElement, text),
   ); // zsviczian -- formulas participate in standalone native text dimensions
   return { text, ...dimensions };
 };

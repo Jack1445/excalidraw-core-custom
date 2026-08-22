@@ -28,12 +28,10 @@ import { register } from "./register";
 const getTextEditor = () =>
   document.querySelector<HTMLTextAreaElement>(".excalidraw-wysiwyg");
 
-type InlineFormulaActionData =
-  | {
-      elementId: string;
-      range: InlineFormulaSourceRange;
-    }
-  | null;
+type InlineFormulaActionData = {
+  elementId: string;
+  range: InlineFormulaSourceRange;
+} | null;
 
 export const actionInsertInlineFormula = register<InlineFormulaActionData>({
   name: "insertInlineFormula",
@@ -42,7 +40,7 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
   trackEvent: false,
   predicate: (_elements, appState) => {
     const element = appState.editingTextElement;
-    return !!element && !element.containerId && element.autoResize;
+    return !!element && !element.containerId;
   },
   perform: async (_elements, appState, data, app) => {
     const editor = getTextEditor();
@@ -53,12 +51,7 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
       directElement && isTextElement(directElement) && !directElement.isDeleted
         ? directElement
         : appState.editingTextElement;
-    if (
-      !editingElement ||
-      editingElement.containerId ||
-      !editingElement.autoResize ||
-      (!data && !editor)
-    ) {
+    if (!editingElement || editingElement.containerId || (!data && !editor)) {
       return false;
     }
 

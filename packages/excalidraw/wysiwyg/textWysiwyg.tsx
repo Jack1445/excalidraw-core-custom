@@ -17,9 +17,18 @@ import { pointFrom, pointRotateRads, type Radians } from "@excalidraw/math";
 
 import {
   getTextFromElements,
-  getInlineFormulaData,
+  getInlineBoldFontString,
+  getInlineBoldRanges,
   getInlineFormulaRenderSize,
-  getInlineFormulaRuns,
+  getInlineTextLineWidth,
+  getInlineTextRuns,
+  elementWithCanvasCache,
+  inlineBoldRangesEqual,
+  isInlineOffsetBold,
+  rebaseInlineBoldRanges,
+  toggleInlineBoldRange,
+  withInlineBoldRanges,
+  INLINE_BOLD_TOGGLE_EVENT,
   originalContainerCache,
   updateBoundElements,
   updateOriginalContainerCache,
@@ -240,19 +249,33 @@ export const textWysiwyg = ({
   } | null = null;
 
   let formulaLayer: HTMLDivElement | null = null;
+  let inlineBoldRanges = getInlineBoldRanges(
+    element,
+    element.originalText.length,
+  );
+  let previousEditableValue = element.originalText;
+  let activeInlineBold: boolean | null = null;
 
-  const updateInlineFormulaOverlay = (
+  const updateInlineTextOverlay = (
     updatedTextElement: ExcalidrawTextElement,
   ) => {
     if (!formulaLayer) {
       return;
     }
     formulaLayer.replaceChildren();
-    const data = getInlineFormulaData(updatedTextElement);
+    inlineBoldRanges = getInlineBoldRanges(
+      updatedTextElement,
+      editable.value.length,
+    );
+    const hasBold = inlineBoldRanges.length > 0;
+    const hasFormula = getInlineTextRuns(
+      editable.value,
+      0,
+      updatedTextElement,
+    ).some((run) => run.type === "formula");
     if (
-      !data ||
+      (!hasBold && !hasFormula) ||
       updatedTextElement.containerId ||
-      !updatedTextElement.autoResize ||
       isRTL(editable.value)
     ) {
       formulaLayer.hidden = true;
@@ -270,6 +293,7 @@ export const textWysiwyg = ({
     });
 
     const font = getFontString(updatedTextElement);
+    const boldFont = getInlineBoldFontString(updatedTextElement);
     const lineHeightPx = getLineHeightInPx(
       updatedTextElement.fontSize,
       updatedTextElement.lineHeight,
@@ -285,28 +309,60 @@ export const textWysiwyg = ({
           ? "#121212"
           : "#ffffff"
         : app.state.viewBackgroundColor;
-    const lines = editable.value.replace(/\r\n?/g, "\n").split("\n");
-    let lineSourceOffset = 0;
+    const lines = getWrappedTextLines(
+      editable.value.replace(/\r\n?/g, "\n"),
+      font,
+      updatedTextElement.autoResize ? Infinity : updatedTextElement.width,
+    );
 
-    lines.forEach((line, lineIndex) => {
-      const runs = getInlineFormulaRuns(line, data);
-      if (!runs.some((run) => run.type === "formula")) {
-        lineSourceOffset += line.length + 1;
+    lines.forEach(({ text: line, start: lineSourceOffset }, lineIndex) => {
+      const runs = getInlineTextRuns(
+        line,
+        lineSourceOffset,
+        updatedTextElement,
+      );
+      if (!runs.some((run) => run.type === "formula" || run.bold)) {
         return;
       }
-      const sourceLineWidth = getLineWidth(line, font);
+      const sourceLineWidth = getInlineTextLineWidth(runs, updatedTextElement);
       let cursorX =
         updatedTextElement.textAlign === "center"
           ? (updatedTextElement.width - sourceLineWidth) / 2
           : updatedTextElement.textAlign === "right"
           ? updatedTextElement.width - sourceLineWidth
           : 0;
-      let runSourceOffset = 0;
 
       runs.forEach((run) => {
         if (run.type === "text") {
-          cursorX += getLineWidth(run.text, font);
-          runSourceOffset += run.text.length;
+          const runWidth = getLineWidth(run.text, run.bold ? boldFont : font);
+          if (run.bold) {
+            const bold = document.createElement("span");
+            bold.textContent = run.text;
+            Object.assign(bold.style, {
+              position: "absolute",
+              display: "block",
+              left: `${cursorX}px`,
+              top: `${lineIndex * lineHeightPx}px`,
+              width: `${Math.max(1, runWidth)}px`,
+              height: `${lineHeightPx}px`,
+              // Keep the native textarea selection and caret visible below
+              // the formatted glyph. Formula runs still use an opaque
+              // background because they must hide their LaTeX source.
+              background: "transparent",
+              color: applyDarkModeFilter(
+                updatedTextElement.strokeColor,
+                app.state.theme === THEME.DARK,
+              ),
+              font: boldFont,
+              fontWeight: "700",
+              lineHeight: `${lineHeightPx}px`,
+              whiteSpace: "pre",
+              opacity: `${updatedTextElement.opacity / 100}`,
+              pointerEvents: "none",
+            });
+            formulaLayer!.appendChild(bold);
+          }
+          cursorX += runWidth;
           return;
         }
         const sourceWidth = Math.max(1, getLineWidth(run.source, font));
@@ -314,8 +370,8 @@ export const textWysiwyg = ({
           run.record,
           updatedTextElement.fontSize,
         );
-        const rangeStart = lineSourceOffset + runSourceOffset;
-        const rangeEnd = rangeStart + run.source.length;
+        const rangeStart = run.sourceStart;
+        const rangeEnd = run.sourceEnd;
         const formula = document.createElement("span");
         const image = document.createElement("img");
         formula.dataset.inlineFormula = run.record.latex;
@@ -327,7 +383,7 @@ export const textWysiwyg = ({
           justifyContent: "flex-start",
           left: `${cursorX}px`,
           top: `${lineIndex * lineHeightPx}px`,
-          width: `${sourceWidth}px`,
+          width: `${Math.max(sourceWidth, size.width)}px`,
           height: `${lineHeightPx}px`,
           background: canvasBackground,
           pointerEvents: "auto",
@@ -338,7 +394,7 @@ export const textWysiwyg = ({
         image.alt = run.record.latex;
         Object.assign(image.style, {
           display: "block",
-          width: `${Math.min(size.width, sourceWidth)}px`,
+          width: `${size.width}px`,
           height: `${Math.min(
             size.height,
             Math.max(1, verticalOffset + size.height * 0.2),
@@ -356,14 +412,16 @@ export const textWysiwyg = ({
           event.stopPropagation();
           editable.focus();
           editable.setSelectionRange(rangeStart, rangeEnd);
-          app.actionManager.executeAction(actionInsertInlineFormula, "ui", null);
+          app.actionManager.executeAction(
+            actionInsertInlineFormula,
+            "ui",
+            null,
+          );
         };
         formula.appendChild(image);
         formulaLayer!.appendChild(formula);
-        cursorX += sourceWidth;
-        runSourceOffset += run.source.length;
+        cursorX += size.width;
       });
-      lineSourceOffset += line.length + 1;
     });
   };
 
@@ -536,8 +594,8 @@ export const textWysiwyg = ({
           updatedTextElement.strokeColor === "transparent" //zsviczian
             ? "var(--excalidraw-caret-color)"
             : appState.theme === THEME.DARK
-              ? applyDarkModeFilter(updatedTextElement.strokeColor)
-              : updatedTextElement.strokeColor, //zsviczian Set caret color
+            ? applyDarkModeFilter(updatedTextElement.strokeColor)
+            : updatedTextElement.strokeColor, //zsviczian Set caret color
       });
       currentTextLayout = {
         angle: angle as Radians,
@@ -558,7 +616,7 @@ export const textWysiwyg = ({
       if (isTestEnv()) {
         editable.style.fontFamily = getFontFamilyString(updatedTextElement);
       }
-      updateInlineFormulaOverlay(updatedTextElement);
+      updateInlineTextOverlay(updatedTextElement);
 
       app.scene.mutateElement(updatedTextElement, { x: coordX, y: coordY });
     }
@@ -603,7 +661,7 @@ export const textWysiwyg = ({
   });
   editable.value = element.originalText;
   formulaLayer = document.createElement("div");
-  formulaLayer.classList.add("excalidraw-inline-formula-editor-layer");
+  formulaLayer.classList.add("excalidraw-inline-text-editor-layer");
   Object.assign(formulaLayer.style, {
     position: "absolute",
     display: "block",
@@ -615,6 +673,84 @@ export const textWysiwyg = ({
     zIndex: "var(--zIndex-wysiwyg)",
     boxSizing: "content-box",
   });
+  const persistInlineBoldRanges = (
+    ranges: ReturnType<typeof getInlineBoldRanges>,
+  ) => {
+    const liveElement = app.scene.getElement<NonDeleted<ExcalidrawTextElement>>(
+      element.id,
+    );
+    if (!liveElement) {
+      return;
+    }
+    inlineBoldRanges = ranges;
+    app.scene.mutateElement(liveElement, {
+      customData: withInlineBoldRanges(
+        liveElement.customData,
+        ranges,
+        editable.value.length,
+      ),
+    });
+    // Text elements are rendered through a per-element canvas cache. Inline
+    // style changes only update customData, so the element object remains the
+    // same and the old unformatted canvas would otherwise be reused after the
+    // WYSIWYG editor closes.
+    elementWithCanvasCache.delete(liveElement);
+  };
+
+  const toggleInlineBoldSelection = () => {
+    const selectionStart = editable.selectionStart;
+    const selectionEnd = editable.selectionEnd;
+    const liveElement = app.scene.getElement<NonDeleted<ExcalidrawTextElement>>(
+      element.id,
+    );
+    if (!liveElement) {
+      return;
+    }
+    const currentRanges = getInlineBoldRanges(
+      liveElement,
+      editable.value.length,
+    );
+    if (selectionStart === selectionEnd) {
+      activeInlineBold = !(
+        activeInlineBold ?? isInlineOffsetBold(currentRanges, selectionStart)
+      );
+    } else {
+      activeInlineBold = null;
+      const nextRanges = toggleInlineBoldRange(
+        currentRanges,
+        selectionStart,
+        selectionEnd,
+        editable.value.length,
+      );
+      persistInlineBoldRanges(nextRanges);
+      onChange?.(editable.value);
+      const updatedTextElement = app.scene.getElement<
+        NonDeleted<ExcalidrawTextElement>
+      >(element.id);
+      updatedTextElement && updateInlineTextOverlay(updatedTextElement);
+    }
+    editable.focus();
+    editable.setSelectionRange(selectionStart, selectionEnd);
+  };
+
+  const onInlineBoldToggle = () => toggleInlineBoldSelection();
+  editable.addEventListener(INLINE_BOLD_TOGGLE_EVENT, onInlineBoldToggle);
+  const onInlineBoldShortcut = (event: KeyboardEvent) => {
+    if (
+      event.target === editable &&
+      event[KEYS.CTRL_OR_CMD] &&
+      !event.altKey &&
+      (event.code === "KeyB" || event.key.toLowerCase() === "b")
+    ) {
+      // Obsidian may register its own Ctrl/Cmd+B handler above Excalidraw.
+      // Capture the shortcut at the window boundary while this textarea owns
+      // focus so partial bold remains local to the selected canvas text.
+      event.preventDefault();
+      event.stopPropagation();
+      toggleInlineBoldSelection();
+    }
+  };
+  window.addEventListener("keydown", onInlineBoldShortcut, true);
   updateWysiwygStyle();
 
   const getCaretIndexFromInitialSceneCoords = () => {
@@ -777,16 +913,34 @@ export const textWysiwyg = ({
         editable.selectionStart = selectionStart;
         editable.selectionEnd = selectionStart;
       }
+      const nextRanges = rebaseInlineBoldRanges(
+        previousEditableValue,
+        editable.value,
+        inlineBoldRanges,
+        activeInlineBold,
+      );
+      if (!inlineBoldRangesEqual(inlineBoldRanges, nextRanges)) {
+        persistInlineBoldRanges(nextRanges);
+      }
+      previousEditableValue = editable.value;
       onChange(editable.value);
       const updatedTextElement = app.scene.getElement<
         NonDeleted<ExcalidrawTextElement>
       >(element.id);
-      updatedTextElement && updateInlineFormulaOverlay(updatedTextElement);
+      updatedTextElement && updateInlineTextOverlay(updatedTextElement);
     };
   }
 
   editable.onkeydown = (event) => {
-    if (!event.shiftKey && actionZoomIn.keyTest(event)) {
+    if (
+      event[KEYS.CTRL_OR_CMD] &&
+      !event.altKey &&
+      (event.code === "KeyB" || event.key.toLowerCase() === "b")
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleInlineBoldSelection();
+    } else if (!event.shiftKey && actionZoomIn.keyTest(event)) {
       event.preventDefault();
       app.actionManager.executeAction(actionZoomIn);
       updateWysiwygStyle();
@@ -1002,6 +1156,8 @@ export const textWysiwyg = ({
     editable.onblur = null;
     editable.oninput = null;
     editable.onkeydown = null;
+    editable.removeEventListener(INLINE_BOLD_TOGGLE_EVENT, onInlineBoldToggle);
+    window.removeEventListener("keydown", onInlineBoldShortcut, true);
 
     if (observer) {
       observer.disconnect();
@@ -1175,7 +1331,10 @@ export const textWysiwyg = ({
     window.addEventListener("resize", updateWysiwygStyle);
   }
 
-  editable.onpointerdown = (event) => event.stopPropagation();
+  editable.onpointerdown = (event) => {
+    activeInlineBold = null;
+    event.stopPropagation();
+  };
 
   // rAF (+ capture to by doubly sure) so we don't catch te pointerdown that
   // triggered the wysiwyg

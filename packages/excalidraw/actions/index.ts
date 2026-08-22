@@ -94,5 +94,6 @@ export { actionToggleLinearEditor } from "./actionLinearEditor";
 
 export { actionToggleSearchMenu } from "./actionToggleSearchMenu";
 export { actionInsertInlineFormula } from "./actionInlineFormula"; // zsviczian -- native text inline formula action
+export { actionToggleInlineBold } from "./actionInlineBold"; // zsviczian -- selection-level native text bold
 
 export { actionToggleCropEditor } from "./actionCropEditor";
